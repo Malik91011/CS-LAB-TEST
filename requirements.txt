@@ -1,6 +1,5 @@
 streamlit
-deepface
-tf-keras
-opencv-python-headless
-numpy<2.0.0
+torch
+transformers
 pillow
+numpy
