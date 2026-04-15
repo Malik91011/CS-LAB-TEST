@@ -1,64 +1,71 @@
 import streamlit as st
-from ultralytics import YOLO
-from PIL import Image
+import cv2
 import numpy as np
+import urllib.request
+import os
+from PIL import Image
 
-# Page configuration
-st.set_page_config(page_title="AI Vision Explorer", layout="wide")
+st.set_page_config(page_title="AI Vision", layout="wide")
+st.title("🤖 CV Object Detector (MobileNet-SSD)")
 
-st.title("📷 AI Computer Vision App")
-st.write("Upload an image to detect objects in real-time using a pretrained YOLOv8 model.")
+# --- MODEL SETUP ---
+# Path to save the model files
+PROTOTXT = "deploy.prototxt"
+MODEL_FILE = "mobilenet_iter_73000.caffemodel"
 
-# Load the model (this will download the 'yolov8n.pt' file automatically on first run)
-# 'n' stands for nano, which is the fastest and most lightweight version for web apps.
+# Download files if they don't exist
+def download_model():
+    base_url = "https://raw.githubusercontent.com/chuanqi305/MobileNet-SSD/master/"
+    if not os.path.exists(PROTOTXT):
+        urllib.request.urlretrieve(base_url + "deploy.prototxt", PROTOTXT)
+    if not os.path.exists(MODEL_FILE):
+        urllib.request.urlretrieve("https://github.com/chuanqi305/MobileNet-SSD/raw/master/mobilenet_iter_73000.caffemodel", MODEL_FILE)
+
+download_model()
+
 @st.cache_resource
-def load_model():
-    return YOLO('yolov8n.pt') 
+def load_net():
+    return cv2.dnn.readNetFromCaffe(PROTOTXT, MODEL_FILE)
 
-model = load_model()
+net = load_net()
 
-# Sidebar for settings
-st.sidebar.header("Settings")
-confidence_threshold = st.sidebar.slider("Confidence Threshold", 0.0, 1.0, 0.4)
+CLASSES = ["background", "aeroplane", "bicycle", "bird", "boat",
+           "bottle", "bus", "car", "cat", "chair", "cow", "diningtable",
+           "dog", "horse", "motorbike", "person", "pottedplant", "sheep",
+           "sofa", "train", "tvmonitor"]
 
-# File uploader
-uploaded_file = st.sidebar.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
+# --- APP INTERFACE ---
+uploaded_file = st.sidebar.file_uploader("Upload an Image", type=["jpg", "png", "jpeg"])
+conf_limit = st.sidebar.slider("Confidence", 0.1, 1.0, 0.4)
 
-if uploaded_file is not None:
-    # Convert the file to an image PIL can read
+if uploaded_file:
+    # Read image
     image = Image.open(uploaded_file)
-    
-    col1, col2 = st.columns(2)
+    frame = np.array(image)
+    (h, w) = frame.shape[:2]
 
-    with col1:
-        st.header("Original Image")
-        st.image(image, use_container_width=True)
+    # Pre-process image for the model
+    blob = cv2.dnn.blobFromImage(cv2.resize(frame, (300, 300)), 0.007843, (300, 300), 127.5)
+    net.setInput(blob)
+    detections = net.forward()
 
-    with col2:
-        st.header("AI Detection")
-        
-        # Perform detection
-        # We convert PIL image to numpy array for YOLO
-        results = model.predict(source=image, conf=confidence_threshold)
-        
-        # Plot the results on the image
-        # res[0].plot() returns a BGR numpy array
-        res_plotted = results[0].plot()[:, :, ::-1] 
-        
-        st.image(res_plotted, caption="Detected Objects", use_container_width=True)
+    # Loop over detections
+    for i in range(detections.shape[2]):
+        confidence = detections[0, 0, i, 2]
+        if confidence > conf_limit:
+            idx = int(detections[0, 0, i, 1])
+            label = CLASSES[idx]
+            
+            # Box coordinates
+            box = detections[0, 0, i, 3:7] * np.array([w, h, w, h])
+            (startX, startY, endX, endY) = box.astype("int")
 
-    # Display raw data summary
-    st.subheader("Detection Results")
-    detections = results[0].boxes.data.tolist()
-    if detections:
-        for det in detections:
-            # x1, y1, x2, y2, confidence, class_id
-            class_id = int(det[5])
-            label = model.names[class_id]
-            score = det[4]
-            st.write(f"✅ Found **{label}** with {score:.2f} confidence")
-    else:
-        st.write("No objects detected. Try lowering the confidence threshold.")
+            # Draw on image
+            cv2.rectangle(frame, (startX, startY), (endX, endY), (0, 255, 0), 2)
+            y = startY - 15 if startY - 15 > 15 else startY + 15
+            cv2.putText(frame, f"{label}: {confidence:.2f}", (startX, y),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
+    st.image(frame, caption="Processed Image", use_container_width=True)
 else:
-    st.info("Please upload an image file in the sidebar to begin.")
+    st.info("Upload an image to start detection.")
