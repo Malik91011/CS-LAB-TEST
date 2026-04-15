@@ -1,71 +1,43 @@
 import streamlit as st
 import cv2
+import mediapipe as mp
 import numpy as np
-import urllib.request
-import os
 from PIL import Image
 
+# Initialize Mediapipe Object Detection
+mp_drawing = mp.solutions.drawing_utils
+mp_object_detection = mp.solutions.object_detection
+
 st.set_page_config(page_title="AI Vision", layout="wide")
-st.title("🤖 CV Object Detector (MobileNet-SSD)")
+st.title("🎯 AI Object Detector")
 
-# --- MODEL SETUP ---
-# Path to save the model files
-PROTOTXT = "deploy.prototxt"
-MODEL_FILE = "mobilenet_iter_73000.caffemodel"
-
-# Download files if they don't exist
-def download_model():
-    base_url = "https://raw.githubusercontent.com/chuanqi305/MobileNet-SSD/master/"
-    if not os.path.exists(PROTOTXT):
-        urllib.request.urlretrieve(base_url + "deploy.prototxt", PROTOTXT)
-    if not os.path.exists(MODEL_FILE):
-        urllib.request.urlretrieve("https://github.com/chuanqi305/MobileNet-SSD/raw/master/mobilenet_iter_73000.caffemodel", MODEL_FILE)
-
-download_model()
-
-@st.cache_resource
-def load_net():
-    return cv2.dnn.readNetFromCaffe(PROTOTXT, MODEL_FILE)
-
-net = load_net()
-
-CLASSES = ["background", "aeroplane", "bicycle", "bird", "boat",
-           "bottle", "bus", "car", "cat", "chair", "cow", "diningtable",
-           "dog", "horse", "motorbike", "person", "pottedplant", "sheep",
-           "sofa", "train", "tvmonitor"]
-
-# --- APP INTERFACE ---
+# File uploader
 uploaded_file = st.sidebar.file_uploader("Upload an Image", type=["jpg", "png", "jpeg"])
-conf_limit = st.sidebar.slider("Confidence", 0.1, 1.0, 0.4)
 
 if uploaded_file:
-    # Read image
+    # Convert uploaded file to OpenCV format
     image = Image.open(uploaded_file)
-    frame = np.array(image)
-    (h, w) = frame.shape[:2]
+    image_np = np.array(image)
+    
+    # Run Mediapipe Detection
+    with mp_object_detection.ObjectDetection(min_detection_confidence=0.4) as object_detection:
+        # Convert RGB to BGR for OpenCV processing if necessary, 
+        # but Mediapipe works well with RGB.
+        results = object_detection.process(image_np)
 
-    # Pre-process image for the model
-    blob = cv2.dnn.blobFromImage(cv2.resize(frame, (300, 300)), 0.007843, (300, 300), 127.5)
-    net.setInput(blob)
-    detections = net.forward()
+        # Draw detections
+        annotated_image = image_np.copy()
+        if results.detections:
+            for detection in results.detections:
+                mp_drawing.draw_detection(annotated_image, detection)
+                
+                # Get label info
+                label = detection.label_id
+                score = detection.score[0]
+                st.write(f"✅ Detected object with {score:.2f} confidence.")
 
-    # Loop over detections
-    for i in range(detections.shape[2]):
-        confidence = detections[0, 0, i, 2]
-        if confidence > conf_limit:
-            idx = int(detections[0, 0, i, 1])
-            label = CLASSES[idx]
-            
-            # Box coordinates
-            box = detections[0, 0, i, 3:7] * np.array([w, h, w, h])
-            (startX, startY, endX, endY) = box.astype("int")
+        # Display results
+        st.image(annotated_image, caption="AI Analysis Complete", use_container_width=True)
 
-            # Draw on image
-            cv2.rectangle(frame, (startX, startY), (endX, endY), (0, 255, 0), 2)
-            y = startY - 15 if startY - 15 > 15 else startY + 15
-            cv2.putText(frame, f"{label}: {confidence:.2f}", (startX, y),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-
-    st.image(frame, caption="Processed Image", use_container_width=True)
 else:
-    st.info("Upload an image to start detection.")
+    st.info("Please upload an image in the sidebar.")
