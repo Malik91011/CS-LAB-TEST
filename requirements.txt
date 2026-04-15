@@ -1,3 +1,5 @@
 streamlit
+fer
+tensorflow-cpu
 numpy
 pillow
