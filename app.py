@@ -1,34 +1,57 @@
 import streamlit as st
-import cv2
+from PIL import Image, ImageOps, ImageFilter
 import numpy as np
-from PIL import Image
 
-st.set_page_config(page_title="Computer Vision Fix", layout="wide")
+st.set_page_config(page_title="Stable AI Vision", layout="wide")
 
-st.title("📷 Stable Computer Vision App")
-st.write("This app uses `opencv-python-headless` for cloud compatibility.")
+st.title("🖼️ Stable Computer Vision App")
+st.write("This version uses **Pillow** to avoid the OpenCV 'ImportError'.")
 
-uploaded_file = st.file_uploader("Upload an image...", type=["jpg", "png", "jpeg"])
+# Sidebar for Image Filters
+st.sidebar.header("Filter Settings")
+filter_type = st.sidebar.selectbox(
+    "Choose a Vision Filter:",
+    ["None", "Edge Enhancement", "Find Edges", "Grayscale", "Blur", "Contour"]
+)
 
-if uploaded_file is not None:
-    # Load image
-    image = Image.open(uploaded_file)
-    img_array = np.array(image)
+uploaded_file = st.file_uploader("Upload an image to process", type=["jpg", "png", "jpeg"])
+
+if uploaded_file:
+    # Open image using Pillow
+    img = Image.open(uploaded_file)
     
-    # Convert RGB to BGR for OpenCV
-    img_bgr = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
+    # Process the image based on selection
+    processed_img = img.copy()
     
-    # Process: Edge Detection (Proves cv2 is working)
-    gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
-    edges = cv2.Canny(gray, 100, 200)
-    
-    # Show Results
+    if filter_type == "Grayscale":
+        processed_img = ImageOps.grayscale(img)
+    elif filter_type == "Edge Enhancement":
+        processed_img = img.filter(ImageFilter.EDGE_ENHANCE)
+    elif filter_type == "Find Edges":
+        processed_img = img.filter(ImageFilter.FIND_EDGES)
+    elif filter_type == "Blur":
+        processed_img = img.filter(ImageFilter.BLUR)
+    elif filter_type == "Contour":
+        processed_img = img.filter(ImageFilter.CONTOUR)
+
+    # Display Results
     col1, col2 = st.columns(2)
+    
     with col1:
         st.header("Original")
-        st.image(image, use_container_width=True)
+        st.image(img, use_container_width=True)
+        
     with col2:
-        st.header("AI Edge Detection")
-        st.image(edges, caption="OpenCV Success!", use_container_width=True)
+        st.header(f"Result: {filter_type}")
+        st.image(processed_img, use_container_width=True)
+
+    # Simple Computer Vision Data (Image Stats)
+    st.subheader("Image Analysis")
+    width, height = img.size
+    img_array = np.array(img)
+    st.write(f"📏 **Dimensions:** {width}x{height} pixels")
+    st.write(f"🎨 **Color Mode:** {img.mode}")
+    st.write(f"📊 **Average Brightness:** {np.mean(img_array):.2f}")
+
 else:
-    st.info("Upload an image to verify the fix.")
+    st.info("Upload an image to see the computer vision model in action.")
