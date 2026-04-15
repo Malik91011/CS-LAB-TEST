@@ -1,43 +1,34 @@
 import streamlit as st
 import cv2
-import mediapipe as mp
 import numpy as np
 from PIL import Image
 
-# Initialize Mediapipe Object Detection
-mp_drawing = mp.solutions.drawing_utils
-mp_object_detection = mp.solutions.object_detection
+st.set_page_config(page_title="Computer Vision Fix", layout="wide")
 
-st.set_page_config(page_title="AI Vision", layout="wide")
-st.title("🎯 AI Object Detector")
+st.title("📷 Stable Computer Vision App")
+st.write("This app uses `opencv-python-headless` for cloud compatibility.")
 
-# File uploader
-uploaded_file = st.sidebar.file_uploader("Upload an Image", type=["jpg", "png", "jpeg"])
+uploaded_file = st.file_uploader("Upload an image...", type=["jpg", "png", "jpeg"])
 
-if uploaded_file:
-    # Convert uploaded file to OpenCV format
+if uploaded_file is not None:
+    # Load image
     image = Image.open(uploaded_file)
-    image_np = np.array(image)
+    img_array = np.array(image)
     
-    # Run Mediapipe Detection
-    with mp_object_detection.ObjectDetection(min_detection_confidence=0.4) as object_detection:
-        # Convert RGB to BGR for OpenCV processing if necessary, 
-        # but Mediapipe works well with RGB.
-        results = object_detection.process(image_np)
-
-        # Draw detections
-        annotated_image = image_np.copy()
-        if results.detections:
-            for detection in results.detections:
-                mp_drawing.draw_detection(annotated_image, detection)
-                
-                # Get label info
-                label = detection.label_id
-                score = detection.score[0]
-                st.write(f"✅ Detected object with {score:.2f} confidence.")
-
-        # Display results
-        st.image(annotated_image, caption="AI Analysis Complete", use_container_width=True)
-
+    # Convert RGB to BGR for OpenCV
+    img_bgr = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
+    
+    # Process: Edge Detection (Proves cv2 is working)
+    gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+    edges = cv2.Canny(gray, 100, 200)
+    
+    # Show Results
+    col1, col2 = st.columns(2)
+    with col1:
+        st.header("Original")
+        st.image(image, use_container_width=True)
+    with col2:
+        st.header("AI Edge Detection")
+        st.image(edges, caption="OpenCV Success!", use_container_width=True)
 else:
-    st.info("Please upload an image in the sidebar.")
+    st.info("Upload an image to verify the fix.")
