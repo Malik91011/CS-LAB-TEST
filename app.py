@@ -1,59 +1,45 @@
 import streamlit as st
-from deepface import DeepFace
+from transformers import BlipProcessor, BlipForConditionalGeneration
 from PIL import Image
-import numpy as np
-import cv2
-import os
+import torch
 
-st.set_page_config(page_title="AI Emotion Detector")
+# Page Config
+st.set_page_config(page_title="AI Storyteller", layout="centered")
 
-st.title("🎭 AI Emotion Recognition")
-st.write("Detecting feelings (Happy, Sad, Angry, etc.) using DeepFace.")
+st.title("📖 AI Image Storyteller")
+st.write("Upload an image, and the AI will describe what's happening.")
 
-uploaded_file = st.file_uploader("Upload a clear photo of a face", type=["jpg", "jpeg", "png"])
+# Load the Model (Cached so it doesn't reload every time)
+@st.cache_resource
+def load_captioning_model():
+    # Using the 'base' model for faster performance on CPU
+    processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+    model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
+    return processor, model
+
+processor, model = load_captioning_model()
+
+uploaded_file = st.file_uploader("Select an image...", type=["jpg", "jpeg", "png"])
 
 if uploaded_file is not None:
-    # 1. Load and Save Image temporarily
-    img = Image.open(uploaded_file).convert("RGB")
-    img_array = np.array(img)
+    # 1. Display the image
+    raw_image = Image.open(uploaded_file).convert('RGB')
+    st.image(raw_image, caption="Uploaded Image", use_container_width=True)
+
+    with st.spinner('Generating caption...'):
+        # 2. Process the image for the model
+        inputs = processor(raw_image, return_tensors="pt")
+
+        # 3. Generate the text
+        out = model.generate(**inputs)
+        caption = processor.decode(out[0], skip_special_tokens=True)
+
+    # 4. Show the result
+    st.subheader("AI Description:")
+    st.success(caption.capitalize())
     
-    # Save to a temp file because DeepFace needs a file path
-    temp_path = "temp_image.jpg"
-    cv2.imwrite(temp_path, cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR))
-
-    try:
-        with st.spinner('AI is analyzing the face...'):
-            # 2. Run DeepFace Analysis
-            # enforce_detection=False prevents crashing if a face isn't perfectly clear
-            results = DeepFace.analyze(img_path=temp_path, actions=['emotion'], enforce_detection=False)
-
-        # 3. Display Results
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.image(img, caption="Uploaded Image", use_container_width=True)
-
-        with col2:
-            st.subheader("Analysis Results")
-            # DeepFace returns a list (in case there are multiple faces)
-            main_face = results[0]
-            dominant_emotion = main_face['dominant_emotion']
-            confidence = main_face['emotion'][dominant_emotion]
-
-            st.metric(label="Detected Emotion", value=dominant_emotion.upper())
-            st.progress(confidence / 100)
-            st.write(f"Confidence Score: **{confidence:.2f}%**")
-
-            with st.expander("See all emotion levels"):
-                for emotion, score in main_face['emotion'].items():
-                    st.write(f"{emotion.title()}: {score:.1f}%")
-
-    except Exception as e:
-        st.error(f"AI Analysis failed: {e}")
-    finally:
-        # Cleanup temp file
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
+    # Extra: Make it a "Story"
+    st.info(f"The AI sees: '{caption}' and thinks this would be a great start to a story!")
 
 else:
-    st.info("Please upload an image to begin.")
+    st.info("Please upload an image to see the AI Storyteller in action.")
