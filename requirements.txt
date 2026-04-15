@@ -1,5 +1,6 @@
 streamlit
-fer
-tensorflow-cpu
+deepface
+tf-keras
+opencv-python-headless
 numpy<2.0.0
 pillow
