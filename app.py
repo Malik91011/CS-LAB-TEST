@@ -1,62 +1,63 @@
 import streamlit as st
-from PIL import Image, ImageOps, ImageFilter
+from fer import FER
 import numpy as np
+from PIL import Image
+import cv2
 
-# Page Config
-st.set_page_config(page_title="AI Vision Fix", layout="wide")
+st.set_page_config(page_title="AI Emotion Detector", layout="wide")
 
-st.title("🛡️ Error-Free Vision App")
-st.write("Current Environment: **Python 3.14 (Stable Mode)**")
+st.title("🎭 AI Facial Emotion Recognition")
+st.write("Upload a photo of a face, and the AI will tell you how they feel.")
 
-# Sidebar
-st.sidebar.header("Controls")
-filter_type = st.sidebar.selectbox(
-    "Select AI Filter:",
-    ["Original", "Grayscale", "Find Edges", "Contour", "Blur", "Sharpen"]
-)
+# Initialize the Emotion Detector
+# mtcnn=True makes it more accurate but slightly slower
+@st.cache_resource
+def load_detector():
+    return FER(mtcnn=True)
 
-uploaded_file = st.file_uploader("Upload an image (JPG or PNG)", type=["jpg", "png", "jpeg"])
+detector = load_detector()
 
-if uploaded_file:
-    try:
-        # 1. Load Image
-        img = Image.open(uploaded_file)
-        
-        # 2. FIX: Convert to RGB (Removes transparency/alpha channel)
-        # This prevents the 'ValueError' in Pillow filters
-        img = img.convert("RGB")
-        
-        # 3. Apply Filters Defensively
-        processed_img = img.copy()
-        
-        if filter_type == "Grayscale":
-            processed_img = ImageOps.grayscale(img)
-        elif filter_type == "Find Edges":
-            processed_img = img.filter(ImageFilter.FIND_EDGES)
-        elif filter_type == "Contour":
-            processed_img = img.filter(ImageFilter.CONTOUR)
-        elif filter_type == "Blur":
-            processed_img = img.filter(ImageFilter.BLUR)
-        elif filter_type == "Sharpen":
-            processed_img = img.filter(ImageFilter.SHARPEN)
+uploaded_file = st.file_uploader("Choose a clear photo of a face...", type=["jpg", "jpeg", "png"])
 
-        # 4. Display Results
-        col1, col2 = st.columns(2)
+if uploaded_file is not None:
+    # 1. Load Image
+    image = Image.open(uploaded_file)
+    image_np = np.array(image.convert('RGB'))
+
+    # 2. Run Detection
+    with st.spinner('AI is analyzing facial expressions...'):
+        # detector.detect_emotions returns a list of faces and their scores
+        results = detector.detect_emotions(image_np)
+
+    if results:
+        # Create columns for the image and the results
+        col1, col2 = st.columns([2, 1])
+
         with col1:
-            st.subheader("Input")
-            st.image(img, use_container_width=True)
+            st.image(image, caption="Analyzed Image", use_container_width=True)
+
         with col2:
-            st.subheader(f"Output: {filter_type}")
-            st.image(processed_img, use_container_width=True)
+            st.subheader("Emotion Analysis")
+            for face in results:
+                # Get the box where the face is
+                box = face["box"]
+                # Get the emotions dictionary
+                emotions = face["emotions"]
+                
+                # Find the emotion with the highest score
+                top_emotion = max(emotions, key=emotions.get)
+                confidence = emotions[top_emotion] * 100
 
-        # Analysis Table
-        st.divider()
-        st.subheader("Image Metadata")
-        st.write(f"**Mode:** {img.mode} | **Size:** {img.size[0]}x{img.size[1]}px")
-
-    except Exception as e:
-        st.error(f"Processing Error: {str(e)}")
-        st.info("Try uploading a different image file.")
+                # Display the result with a nice color highlight
+                st.metric(label="Primary Emotion", value=top_emotion.title())
+                st.write(f"Confidence: **{confidence:.1f}%**")
+                
+                # Show all detected scores for this face
+                with st.expander("Show detailed scores"):
+                    for emo, score in emotions.items():
+                        st.write(f"{emo.title()}: {score:.2f}")
+    else:
+        st.warning("No faces detected. Please try a clearer photo or a front-facing shot.")
 
 else:
-    st.info("Please upload an image to begin.")
+    st.info("Please upload an image to start.")
