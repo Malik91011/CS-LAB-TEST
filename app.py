@@ -1,45 +1,47 @@
 import streamlit as st
-from transformers import BlipProcessor, BlipForConditionalGeneration
+from rembg import remove
 from PIL import Image
-import torch
+import io
 
-# Page Config
-st.set_page_config(page_title="AI Storyteller", layout="centered")
+# Page setup
+st.set_page_config(page_title="AI Background Remover", layout="centered")
 
-st.title("📖 AI Image Storyteller")
-st.write("Upload an image, and the AI will describe what's happening.")
+st.title("✂️ AI Background Remover")
+st.write("Upload an image to remove the background instantly using the U2-Net model.")
 
-# Load the Model (Cached so it doesn't reload every time)
-@st.cache_resource
-def load_captioning_model():
-    # Using the 'base' model for faster performance on CPU
-    processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
-    model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
-    return processor, model
-
-processor, model = load_captioning_model()
-
-uploaded_file = st.file_uploader("Select an image...", type=["jpg", "jpeg", "png"])
+uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
 
 if uploaded_file is not None:
-    # 1. Display the image
-    raw_image = Image.open(uploaded_file).convert('RGB')
-    st.image(raw_image, caption="Uploaded Image", use_container_width=True)
-
-    with st.spinner('Generating caption...'):
-        # 2. Process the image for the model
-        inputs = processor(raw_image, return_tensors="pt")
-
-        # 3. Generate the text
-        out = model.generate(**inputs)
-        caption = processor.decode(out[0], skip_special_tokens=True)
-
-    # 4. Show the result
-    st.subheader("AI Description:")
-    st.success(caption.capitalize())
+    # 1. Load the original image
+    input_image = Image.open(uploaded_file)
     
-    # Extra: Make it a "Story"
-    st.info(f"The AI sees: '{caption}' and thinks this would be a great start to a story!")
+    # Create columns for side-by-side view
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.header("Original")
+        st.image(input_image, use_container_width=True)
+
+    with col2:
+        st.header("Background Removed")
+        with st.spinner('AI is processing...'):
+            # 2. Run the Background Removal Model
+            # The 'remove' function handles the math and transparency
+            output_image = remove(input_image)
+            st.image(output_image, use_container_width=True)
+
+    # 3. Download Button
+    # We must convert the result back to bytes for the download button
+    buf = io.BytesIO()
+    output_image.save(buf, format="PNG")
+    byte_im = buf.getvalue()
+
+    st.download_button(
+        label="Download Transparent Image",
+        data=byte_im,
+        file_name="background_removed.png",
+        mime="image/png"
+    )
 
 else:
-    st.info("Please upload an image to see the AI Storyteller in action.")
+    st.info("Please upload an image to see the AI in action.")
